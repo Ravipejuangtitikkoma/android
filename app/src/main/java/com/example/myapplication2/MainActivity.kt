@@ -52,10 +52,17 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.intellij.lang.annotations.JdkConstants
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.coroutines.coroutineContext
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.font.FontWeight
 
 class MainActivity : ComponentActivity() {
 
@@ -415,45 +422,130 @@ suspend fun nativeApiRegister(namaInput: String, emailInput: String, passwordInp
     }
 }
 
+
 @Composable
 fun LayarDashboard(modifier: Modifier= Modifier, nama: String, email: String, aksiLogout: () -> Unit){
+
+    // --- STATE UNTUK RECYCLERVIEW (LAZYCOLUMN) ---
+    var daftarPost by remember { mutableStateOf(emptyList<PostDemo>()) }
+    var sedangLoading by remember { mutableStateOf(true) }
+
+    // LaunchedEffect akan langsung berjalan 1 kali saat LayarDashboard terbuka
+    LaunchedEffect(Unit) {
+        daftarPost = dataGetBrowser() // Tembak API
+        sedangLoading = false // Matikan tulisan loading
+    }
+
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+
+        // --- 1. BAGIAN PROFIL ATAS ---
         Image(
             painter = painterResource(id= R.drawable.ic_avatar),
             contentDescription = "Foto profil user",
-
             modifier= Modifier
-                .size(120.dp)
+                .size(100.dp)
                 .clip(CircleShape)
                 .border(2.dp, Color.Gray, CircleShape)
         )
+        Text(text = "Halo, $nama", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+        Text(text = email, fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 16.dp))
 
-        Text(
-            text = "Halo, $nama",
-            fontSize = 13.sp,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        // --- 2. BAGIAN LAZYCOLUMN (PENGGANTI RECYCLERVIEW) ---
+        Text(text = "Daftar Postingan dari Internet:", fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
-            text = "Email, $email",
-            fontSize = 13.sp,
-            modifier= Modifier.padding(bottom = 32.dp)
+        if (sedangLoading) {
+            // Tampilkan ini saat sedang menunggu data dari internet
+            Text("Memuat data...", modifier = Modifier.weight(1f))
+        } else {
+            // Ini adalah bentuk modern dari RecyclerView di Jetpack Compose
+            LazyColumn(
+                modifier = Modifier.weight(1f) // .weight(1f) artinya kolom ini akan memakan sisa ruang kosong di tengah
+            ) {
+                items(daftarPost) { post ->
+                    // Card (Kartu) untuk setiap item
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(text = post.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(text = post.body, fontSize = 14.sp, color = Color.DarkGray)
+                        }
+                    }
+                }
+            }
+        }
 
-        )
+        Spacer(modifier = Modifier.height(16.dp))
 
-        //Tombol keluar
+        // --- 3. BAGIAN TOMBOL LOGOUT ---
         Button(
-            onClick = {aksiLogout()},
-            modifier= Modifier.fillMaxWidth().height(50.dp)
+            onClick = { aksiLogout() },
+            modifier = Modifier.fillMaxWidth().height(50.dp)
         ) {
-            Text(text = "Keluar Logout")
+            Text(text = "Keluar (Logout)")
         }
     }
 }
+
+    // 1. Ini adalah kerangka data (Model) dari JSON Placeholder
+    data class PostDemo(
+        val id: Int,
+        val title: String,
+        val body: String
+    )
+
+    suspend fun dataGetBrowser(): List<PostDemo>{
+        return withContext(Dispatchers.IO){
+            val listHasil=  mutableListOf<PostDemo>()
+            var connection: HttpURLConnection? =null
+            try {
+                var url= URL("https://jsonplaceholder.typicode.com/posts")
+                connection= url.openConnection() as HttpURLConnection
+                connection.requestMethod="GET"// kita menggunakan get untuk mengambil data
+
+                if(connection.responseCode == 200 || connection.responseCode == HttpURLConnection.HTTP_OK){
+                    val responBody= connection.inputStream.bufferedReader().use { it.readText() }
+
+                    val jsonArray= JSONArray(responBody)
+
+                    val batasData= if (jsonArray.length() > 10) 10 else jsonArray.length()
+
+                    for (i in 0 until batasData){
+                        val jsonObj= jsonArray.getJSONObject(i)
+
+                        listHasil.add(
+                            PostDemo(
+                                id= jsonObj.getInt("id"),
+                                title= jsonObj.getString("title"),
+                                body= jsonObj.getString("body")
+                            )
+                        )
+                    }
+
+
+                }
+            }catch (e: Exception){
+
+            }finally {
+                connection?.disconnect()
+            }
+            listHasil
+        }
+    }
+
+
+
+
+
+
 
