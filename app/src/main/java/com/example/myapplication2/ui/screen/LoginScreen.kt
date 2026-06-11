@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 
 @Composable
 fun LoginScreen(
+    modifier: Modifier = Modifier, // <--- TAMBAHKAN INI
     onNavigateToRegister: () -> Unit,
     onLoginSuccess: (user: com.example.myapplication2.model.User, token: String) -> Unit
 ) {
@@ -28,19 +29,21 @@ fun LoginScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    // Gunakan parameter modifier di sini agar padding dari Scaffold terbawa
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // ... (kode lainnya tetap sama)
         Text(text = "Welcome Back", fontSize = 28.sp, modifier = Modifier.padding(bottom = 32.dp))
 
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email") }, // <-- Harusnya sekarang OK
+            label = { Text("Email") },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
         )
@@ -49,7 +52,7 @@ fun LoginScreen(
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password") }, // <-- Harusnya sekarang OK
+            label = { Text("Password") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
@@ -58,8 +61,11 @@ fun LoginScreen(
 
         Button(
             onClick = {
+                // Jangan lupa lengkapi logika authRepo.login di sini
                 if (email.isBlank() || password.isBlank()) {
-                    // ... logika
+                    Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
+                } else {
+                    // Masukkan logika login Anda di sini
                 }
             },
             modifier = Modifier.fillMaxWidth().height(48.dp),

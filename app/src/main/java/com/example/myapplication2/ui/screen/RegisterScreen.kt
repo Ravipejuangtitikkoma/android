@@ -1,7 +1,7 @@
 package com.example.myapplication2.ui.screen
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*          // Import semua Material3 - cukup ini
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 
 @Composable
 fun RegisterScreen(
+    modifier: Modifier = Modifier, // <--- TAMBAHKAN PARAMETER INI
     onNavigateToLogin: () -> Unit
 ) {
     val authRepo = remember { AuthRepository() }
@@ -27,8 +28,9 @@ fun RegisterScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    // Gunakan modifier yang diterima dari parameter di bawah ini
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.Center,
@@ -68,21 +70,19 @@ fun RegisterScreen(
             onClick = {
                 if (name.isBlank() || email.isBlank() || password.isBlank()) {
                     Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
-                    return@onClick
-                }
-                isLoading = true
-                coroutineScope.launch {
-                    when (val result = authRepo.register(name, email, password)) {
-                        is ApiResponse.Success -> {
-                            Toast.makeText(context, result.data, Toast.LENGTH_LONG).show()
-                            onNavigateToLogin() // Pindah ke login setelah sukses
-                        }
-                        is ApiResponse.Error -> {
-                            Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
-                            isLoading = false
-                        }
-                        is ApiResponse.Loading -> {
-                            // Loading state already handled above
+                } else {
+                    isLoading = true
+                    coroutineScope.launch {
+                        when (val result = authRepo.register(name, email, password)) {
+                            is ApiResponse.Success -> {
+                                Toast.makeText(context, result.data, Toast.LENGTH_LONG).show()
+                                onNavigateToLogin()
+                            }
+                            is ApiResponse.Error -> {
+                                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                                isLoading = false
+                            }
+                            is ApiResponse.Loading -> { }
                         }
                     }
                 }
