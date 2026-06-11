@@ -1,85 +1,77 @@
 package com.example.myapplication2.ui.screen
 
-// import androidx.compose.material3.OutlinedTextField // <-- HAPUS
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.* // <-- Cukup ini untuk semua komponen Material3
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myapplication2.repository.AuthRepository
+import com.example.myapplication2.model.User
 import com.example.myapplication2.network.ApiResponse
+import com.example.myapplication2.repository.AuthRepository
 import kotlinx.coroutines.launch
-import android.widget.Toast
-import androidx.compose.runtime.saveable.rememberSaveable
 
 @Composable
 fun LoginScreen(
-    modifier: Modifier = Modifier, // <--- TAMBAHKAN INI
+    modifier: Modifier = Modifier,
     onNavigateToRegister: () -> Unit,
-    onLoginSuccess: (user: com.example.myapplication2.model.User, token: String) -> Unit
+    onLoginSuccess: (User, String) -> Unit
 ) {
     val authRepo = remember { AuthRepository() }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
 
-    // Gunakan parameter modifier di sini agar padding dari Scaffold terbawa
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
+        modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // ... (kode lainnya tetap sama)
-        Text(text = "Welcome Back", fontSize = 28.sp, modifier = Modifier.padding(bottom = 32.dp))
+        Text(text = "Selamat Datang", fontSize = 28.sp, modifier = Modifier.padding(bottom = 32.dp))
 
-        OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text("Email") },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        )
+        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), enabled = !isLoading)
         Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        )
+        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), enabled = !isLoading)
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
             onClick = {
-                // Jangan lupa lengkapi logika authRepo.login di sini
                 if (email.isBlank() || password.isBlank()) {
-                    Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Harap isi email dan password", Toast.LENGTH_SHORT).show()
                 } else {
-                    // Masukkan logika login Anda di sini
+                    isLoading = true
+                    coroutineScope.launch {
+                        when (val result = authRepo.login(email, password)) {
+                            is ApiResponse.Success -> {
+                                Toast.makeText(context, "Berhasil Login", Toast.LENGTH_SHORT).show()
+                                onLoginSuccess(result.data.first, result.data.second)
+                            }
+                            is ApiResponse.Error -> {
+                                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                                isLoading = false
+                            }
+                            else -> isLoading = false
+                        }
+                    }
                 }
             },
-            modifier = Modifier.fillMaxWidth().height(48.dp),
-            enabled = !isLoading
+            modifier = Modifier.fillMaxWidth().height(48.dp), enabled = !isLoading
         ) {
-            if (isLoading) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-            } else {
-                Text(text = "Sign In")
-            }
+            if (isLoading) CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+            else Text(text = "Masuk")
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
         TextButton(onClick = onNavigateToRegister, enabled = !isLoading) {
-            Text("Don't have an account? Sign Up here")
+            Text("Belum punya akun? Daftar di sini")
         }
     }
 }

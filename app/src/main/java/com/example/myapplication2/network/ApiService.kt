@@ -1,168 +1,143 @@
 package com.example.myapplication2.network
 
-import android.util.Log
 import com.example.myapplication2.model.Post
 import com.example.myapplication2.model.User
-import org.json.JSONArray
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.nio.charset.StandardCharsets
 
 object ApiService {
     private const val BASE_URL = "http://10.0.2.2:8000/api"
 
-    // Login
-    suspend fun login(email: String, password: String): ApiResponse<Pair<User, String>> { // Mengembalikan User dan Token
-        return try {
+    // WAJIB: withContext(Dispatchers.IO) agar tidak NetworkOnMainThreadException
+    suspend fun login(email: String, password: String): ApiResponse<Pair<User, String>> = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
+        try {
             val url = URL("$BASE_URL/login")
-            val connection = url.openConnection() as HttpURLConnection
-            try {
-                connection.requestMethod = "POST"
-                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                connection.setRequestProperty("Accept", "application/json")
-                connection.doOutput = true
+            connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json; utf-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.doOutput = true
 
-                val jsonBody = JSONObject().apply {
-                    put("email", email)
-                    put("password", password)
-                }.toString()
+            val jsonBody = JSONObject().apply {
+                put("email", email)
+                put("password", password)
+            }.toString()
 
-                connection.outputStream.use { os ->
-                    val input = jsonBody.toByteArray(StandardCharsets.UTF_8)
-                    os.write(input, 0, input.size)
-                }
+            connection.outputStream.use { os ->
+                val input = jsonBody.toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
 
-                val responseCode = connection.responseCode
-                if (responseCode == HttpURLConnection.HTTP_OK) {
-                    val responseBody = connection.inputStream.bufferedReader().readText()
-                    val jsonResponse = JSONObject(responseBody)
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                val jsonResponse = JSONObject(responseText)
 
-                    if (jsonResponse.optBoolean("status", false)) {
-                        val token = jsonResponse.getString("access_token")
-                        val userDataJson = jsonResponse.getJSONObject("user")
+                if (jsonResponse.optBoolean("status", false)) {
+                    val token = jsonResponse.optString("access_token", "")
+                    val dataUser = jsonResponse.optJSONObject("user")
+
+                    if (token.isNotEmpty() && dataUser != null) {
                         val user = User(
-                            id = userDataJson.getInt("id"),
-                            name = userDataJson.getString("name"),
-                            email = userDataJson.getString("email")
+                            id = dataUser.optInt("id", 0),
+                            name = dataUser.optString("name", "Unknown"),
+                            email = dataUser.optString("email", "Unknown")
                         )
-                        ApiResponse.Success(Pair(user, token))
-                    } else {
-                        val errorMessage = jsonResponse.optString("message", "Login failed")
-                        ApiResponse.Error(errorMessage)
+                        return@withContext ApiResponse.Success(Pair(user, token))
                     }
-                } else {
-                    val errorBody = connection.errorStream?.bufferedReader()?.readText()
-                    Log.e("API_SERVICE", "Login Error: $responseCode - $errorBody")
-                    ApiResponse.Error("Server Error: $responseCode")
                 }
-            } finally {
-                connection.disconnect()
+                return@withContext ApiResponse.Error(jsonResponse.optString("message", "Login gagal dari server"))
+            } else {
+                val errorText = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                return@withContext ApiResponse.Error("Error $responseCode: $errorText")
             }
-        } catch (e: IOException) {
-            Log.e("API_SERVICE", "Network Error during login: ${e.message}", e)
-            ApiResponse.Error("Network Error: ${e.message}")
         } catch (e: Exception) {
-            Log.e("API_SERVICE", "Unexpected Error during login: ${e.message}", e)
-            ApiResponse.Error("Unexpected Error: ${e.message}")
+            return@withContext ApiResponse.Error("Koneksi gagal: ${e.message}")
+        } finally {
+            connection?.disconnect()
         }
     }
 
-    // Register
-    suspend fun register(name: String, email: String, password: String): ApiResponse<String> {
-        return try {
+    suspend fun register(name: String, email: String, password: String): ApiResponse<String> = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
+        try {
             val url = URL("$BASE_URL/register")
-            val connection = url.openConnection() as HttpURLConnection
-            try {
-                connection.requestMethod = "POST"
-                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                connection.setRequestProperty("Accept", "application/json")
-                connection.doOutput = true
+            connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json; utf-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.doOutput = true
 
-                val jsonBody = JSONObject().apply {
-                    put("name", name)
-                    put("email", email)
-                    put("password", password)
-                }.toString()
+            val jsonBody = JSONObject().apply {
+                put("name", name)
+                put("email", email)
+                put("password", password)
+            }.toString()
 
-                connection.outputStream.use { os ->
-                    val input = jsonBody.toByteArray(StandardCharsets.UTF_8)
-                    os.write(input, 0, input.size)
-                }
-
-                val responseCode = connection.responseCode
-                if (responseCode in listOf(HttpURLConnection.HTTP_OK, HttpURLConnection.HTTP_CREATED)) {
-                    val responseBody = connection.inputStream.bufferedReader().readText()
-                    val jsonResponse = JSONObject(responseBody)
-
-                    if (jsonResponse.optBoolean("status", false)) {
-                        ApiResponse.Success("Registration successful")
-                    } else {
-                        val errorMessage = jsonResponse.optString("message", "Registration failed")
-                        ApiResponse.Error(errorMessage)
-                    }
-                } else {
-                    val errorBody = connection.errorStream?.bufferedReader()?.readText()
-                    Log.e("API_SERVICE", "Register Error: $responseCode - $errorBody")
-                    ApiResponse.Error("Server Error: $responseCode")
-                }
-            } finally {
-                connection.disconnect()
+            connection.outputStream.use { os ->
+                val input = jsonBody.toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
             }
-        } catch (e: IOException) {
-            Log.e("API_SERVICE", "Network Error during registration: ${e.message}", e)
-            ApiResponse.Error("Network Error: ${e.message}")
+
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_CREATED) {
+                val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                val jsonResponse = JSONObject(responseText)
+                if (jsonResponse.optBoolean("status", false)) {
+                    return@withContext ApiResponse.Success("Pendaftaran berhasil!")
+                } else {
+                    return@withContext ApiResponse.Error(jsonResponse.optString("message", "Gagal mendaftar"))
+                }
+            } else {
+                return@withContext ApiResponse.Error("Error server: $responseCode")
+            }
         } catch (e: Exception) {
-            Log.e("API_SERVICE", "Unexpected Error during registration: ${e.message}", e)
-            ApiResponse.Error("Unexpected Error: ${e.message}")
+            return@withContext ApiResponse.Error("Koneksi gagal: ${e.message}")
+        } finally {
+            connection?.disconnect()
         }
     }
 
-    // Get Posts
-    suspend fun getPosts(token: String): ApiResponse<List<Post>> {
-        return try {
+    suspend fun getPosts(token: String): ApiResponse<List<Post>> = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
+        try {
             val url = URL("$BASE_URL/posts")
-            val connection = url.openConnection() as HttpURLConnection
-            try {
-                connection.requestMethod = "GET"
-                connection.setRequestProperty("Authorization", "Bearer $token")
-                connection.setRequestProperty("Accept", "application/json")
+            connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.setRequestProperty("Accept", "application/json")
 
-                val responseCode = connection.responseCode
-                if (responseCode == HttpURLConnection.HTTP_OK) {
-                    val responseBody = connection.inputStream.bufferedReader().readText()
-                    val jsonResponse = JSONObject(responseBody)
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                val jsonResponse = JSONObject(responseText)
 
-                    val posts = mutableListOf<Post>()
-                    if (jsonResponse.has("data")) {
-                        val jsonArray = jsonResponse.getJSONArray("data")
-                        for (i in 0 until jsonArray.length()) {
-                            val jsonObj = jsonArray.getJSONObject(i)
-                            posts.add(
-                                Post(
-                                    id = jsonObj.getInt("id"),
-                                    title = jsonObj.getString("title"),
-                                    body = jsonObj.getString("body")
-                                )
+                val posts = mutableListOf<Post>()
+                if (jsonResponse.has("data")) {
+                    val jsonArray = jsonResponse.getJSONArray("data")
+                    for (i in 0 until jsonArray.length()) {
+                        val jsonObj = jsonArray.getJSONObject(i)
+                        posts.add(
+                            Post(
+                                id = jsonObj.optInt("id", 0),
+                                title = jsonObj.optString("title", "No Title"),
+                                body = jsonObj.optString("body", "No Content")
                             )
-                        }
+                        )
                     }
-                    ApiResponse.Success(posts.toList())
-                } else {
-                    val errorBody = connection.errorStream?.bufferedReader()?.readText()
-                    Log.e("API_SERVICE", "Get Posts Error: $responseCode - $errorBody")
-                    ApiResponse.Error("Server Error: $responseCode")
                 }
-            } finally {
-                connection.disconnect()
+                return@withContext ApiResponse.Success(posts.toList())
+            } else {
+                return@withContext ApiResponse.Error("Gagal mengambil data: $responseCode")
             }
-        } catch (e: IOException) {
-            Log.e("API_SERVICE", "Network Error fetching posts: ${e.message}", e)
-            ApiResponse.Error("Network Error: ${e.message}")
         } catch (e: Exception) {
-            Log.e("API_SERVICE", "Unexpected Error fetching posts: ${e.message}", e)
-            ApiResponse.Error("Unexpected Error: ${e.message}")
+            return@withContext ApiResponse.Error("Koneksi gagal: ${e.message}")
+        } finally {
+            connection?.disconnect()
         }
     }
 }
