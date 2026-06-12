@@ -19,6 +19,7 @@ import com.example.myapplication2.model.User
 import com.example.myapplication2.ui.screen.DashboardScreen
 import com.example.myapplication2.ui.screen.LoginScreen
 import com.example.myapplication2.ui.screen.RegisterScreen
+import com.example.myapplication2.ui.screen.TambahPostScreen
 import com.example.myapplication2.ui.theme.MyApplication2Theme
 
 class MainActivity : ComponentActivity() {
@@ -91,6 +92,21 @@ fun MainApp() {
                         navController.navigate("login") {
                             popUpTo("dashboard") { inclusive = true }
                         }
+                    },
+                    onTambah = {
+                        navController.navigate("tambah_post")
+                    }
+                )
+            }
+
+            composable ("tambah_post"){
+                val token = sharedPrefe.getString("TOKEN_LOGIN", "") ?: ""
+
+                TambahPostScreen(
+                    token = token,
+                    onNavigateBack = {
+                        // Kembali ke halaman sebelumnya (Dashboard)
+                        navController.popBackStack()
                     }
                 )
             }

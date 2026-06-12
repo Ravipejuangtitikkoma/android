@@ -9,7 +9,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object ApiService {
-    private const val BASE_URL = "http://10.0.2.2:8000/api"
+    private const val BASE_URL = "http://192.168.0.105:8000/api"
 
     // WAJIB: withContext(Dispatchers.IO) agar tidak NetworkOnMainThreadException
     suspend fun login(email: String, password: String): ApiResponse<Pair<User, String>> = withContext(Dispatchers.IO) {
@@ -140,4 +140,104 @@ object ApiService {
             connection?.disconnect()
         }
     }
+
+    suspend fun createPost(token: String, title: String, body: String): ApiResponse<String> = withContext(Dispatchers.IO){
+        var connection: HttpURLConnection? = null
+
+        try {
+            val url = URL("$BASE_URL/posts")
+            connection= url.openConnection() as HttpURLConnection
+            connection.requestMethod="POST"
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.setRequestProperty("Content-Type", "application/json; utf-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.doOutput = true
+
+            val jsonBody = JSONObject().apply {
+                put("title",title)
+                put("body", body)
+            }.toString()
+
+            connection.outputStream.use{os ->
+                val input = jsonBody.toByteArray(Charsets.UTF_8)
+            os.write(input,0,input.size)
+            }
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_CREATED) {
+                return@withContext ApiResponse.Success("Postingan berhasil ditambahkan!")
+            } else {
+                val errorText = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                return@withContext ApiResponse.Error("Gagal menambahkan: $responseCode")
+            }
+        }catch (e: Exception){
+            return@withContext ApiResponse.Error("Koneksi gagal: ${e.message}")
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    suspend fun deletePost(token: String, postId: Int): ApiResponse<String> = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
+        try {
+            val url = URL("$BASE_URL/posts/$postId")
+            connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "DELETE"
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.setRequestProperty("Accept", "application/json")
+
+            val responseCode = connection.responseCode
+            // HTTP_OK (200) atau HTTP_NO_CONTENT (204) biasanya digunakan jika berhasil dihapus
+            if (responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_NO_CONTENT) {
+                return@withContext ApiResponse.Success("Berhasil dihapus")
+            } else {
+                return@withContext ApiResponse.Error("Gagal menghapus: $responseCode")
+            }
+        } catch (e: Exception) {
+            return@withContext ApiResponse.Error("Koneksi gagal: ${e.message}")
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    suspend fun updatePost(token: String, postId:Int, title: String, body: String): ApiResponse<String> = withContext(Dispatchers.IO){
+        var connection: HttpURLConnection? = null
+        try {
+            var url= URL("$BASE_URL/posts/$postId")
+            connection= url.openConnection() as HttpURLConnection
+            connection.requestMethod="PUT"// gunakan method put untuk update data
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.setRequestProperty("Content-Type", "application/json; utf-8")
+            connection.setRequestProperty("Accept","application/json")
+            connection.doOutput = true
+
+
+            // ini yang biasa kalau kita di postman untuk mengisinya kita mengunakan Tap body
+            val jsonBody = JSONObject().apply {
+                put("title",title)
+                put("body", body)
+            }.toString()
+
+            connection.outputStream.use { os ->
+                val input = jsonBody.toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
+
+            val responcode= connection.responseCode
+            if(responcode == HttpURLConnection.HTTP_OK){
+                return@withContext ApiResponse.Success("Postingan berhasil diperbarui!")
+
+            }else{
+                val erroText= connection.errorStream?.bufferedReader()?.use {it.readText()} ?: "Unknown error"
+                return@withContext ApiResponse.Error("Gagal Memperbarui: $responcode")
+            }
+
+
+
+        }catch (e: Exception){
+            return@withContext ApiResponse.Error("Koneksi gagal: ${e.message}")
+        }finally {
+            connection?.disconnect()
+        }
+    }
+
 }

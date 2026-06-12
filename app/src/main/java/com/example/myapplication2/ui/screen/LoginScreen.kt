@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication2.model.User
 import com.example.myapplication2.network.ApiResponse
-import com.example.myapplication2.repository.AuthRepository
+import com.example.myapplication2.network.ApiService // <-- Import ApiService langsung
 import kotlinx.coroutines.launch
 
 @Composable
@@ -22,7 +22,7 @@ fun LoginScreen(
     onNavigateToRegister: () -> Unit,
     onLoginSuccess: (User, String) -> Unit
 ) {
-    val authRepo = remember { AuthRepository() }
+    // AuthRepository dihapus
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -49,7 +49,8 @@ fun LoginScreen(
                 } else {
                     isLoading = true
                     coroutineScope.launch {
-                        when (val result = authRepo.login(email, password)) {
+                        // Memanggil ApiService.login secara langsung
+                        when (val result = ApiService.login(email, password)) {
                             is ApiResponse.Success -> {
                                 Toast.makeText(context, "Berhasil Login", Toast.LENGTH_SHORT).show()
                                 onLoginSuccess(result.data.first, result.data.second)

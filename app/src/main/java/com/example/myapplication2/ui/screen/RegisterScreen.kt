@@ -12,12 +12,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication2.network.ApiResponse
-import com.example.myapplication2.repository.AuthRepository
+import com.example.myapplication2.network.ApiService // <-- Import ApiService langsung
 import kotlinx.coroutines.launch
 
 @Composable
 fun RegisterScreen(modifier: Modifier = Modifier, onNavigateToLogin: () -> Unit) {
-    val authRepo = remember { AuthRepository() }
+    // AuthRepository dihapus
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -43,7 +43,8 @@ fun RegisterScreen(modifier: Modifier = Modifier, onNavigateToLogin: () -> Unit)
                 } else {
                     isLoading = true
                     coroutineScope.launch {
-                        when (val result = authRepo.register(name, email, password)) {
+                        // Memanggil ApiService.register secara langsung
+                        when (val result = ApiService.register(name, email, password)) {
                             is ApiResponse.Success -> {
                                 Toast.makeText(context, "Daftar berhasil, silakan login", Toast.LENGTH_LONG).show()
                                 onNavigateToLogin()
