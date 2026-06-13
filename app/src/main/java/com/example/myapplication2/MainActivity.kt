@@ -60,6 +60,7 @@ fun MainApp() {
                             putInt("ID_USER", user.id)
                             putString("NAMA_USER", user.name)
                             putString("EMAIL_USER", user.email)
+                            putString("PHOTO_USER", user.photoUrl)
                             putString("TOKEN_LOGIN", token)
                             apply()
                         }
@@ -83,8 +84,10 @@ fun MainApp() {
                 val email = sharedPrefe.getString("EMAIL_USER", "") ?: ""
                 val token = sharedPrefe.getString("TOKEN_LOGIN", "") ?: ""
 
+                val photoUrl= sharedPrefe.getString("PHOTO_USER", null)
+
                 DashboardScreen(
-                    user = User(id, nama, email),
+                    user = User(id, nama, email, photoUrl),
                     token = token,
                     onLogout = {
                         // Hapus sesi

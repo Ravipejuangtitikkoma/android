@@ -1,6 +1,8 @@
 package com.example.myapplication2.ui.screen
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -16,11 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage // <-- TAMBAHAN IMPORT COIL
 import com.example.myapplication2.R
 import com.example.myapplication2.model.Post
 import com.example.myapplication2.model.User
@@ -36,11 +40,37 @@ fun DashboardScreen(modifier: Modifier = Modifier, user: User, token: String, on
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    // --- 1. DEKLARASI VARIABEL UNTUK EDIT ---
+    // --- 1. DEKLARASI VARIABEL UNTUK EDIT POST ---
     var postToEdit by remember { mutableStateOf<Post?>(null) }
     var editTitle by remember { mutableStateOf("") }
     var editBody by remember { mutableStateOf("") }
     var isUpdating by remember { mutableStateOf(false) }
+
+    // =========================================================
+    // --- TAMBAHAN: VARIABEL UNTUK EDIT PROFIL & REAL-TIME ---
+    // =========================================================
+    fun getLatestUserData(): Triple<String, String, String?> {
+        val prefs = context.getSharedPreferences("SesiPengguna", android.content.Context.MODE_PRIVATE)
+        return Triple(
+            prefs.getString("NAMA_USER", user.name) ?: user.name,
+            prefs.getString("EMAIL_USER", user.email) ?: user.email,
+            prefs.getString("PHOTO_USER", user.photoUrl)
+        )
+    }
+
+    var currentData by remember { mutableStateOf(getLatestUserData()) }
+    LaunchedEffect(Unit) { currentData = getLatestUserData() }
+
+    var showEditProfile by remember { mutableStateOf(false) }
+    var editProfileName by remember { mutableStateOf(user.name) }
+    var editProfileEmail by remember { mutableStateOf(user.email) }
+    var selectedImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var isUpdatingProfile by remember { mutableStateOf(false) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        selectedImageUri = uri
+    }
+    // =========================================================
 
     // Fungsi untuk mengambil data dari server (bisa dipanggil berulang kali)
     fun loadData() {
@@ -56,9 +86,28 @@ fun DashboardScreen(modifier: Modifier = Modifier, user: User, token: String, on
     }
     Box(modifier= Modifier.fillMaxSize()){
         Column(modifier = modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Image(painter = painterResource(id = R.drawable.ic_avatar), contentDescription = null, modifier = Modifier.size(100.dp).clip(CircleShape).border(2.dp, Color.Gray, CircleShape))
-            Text(text = "Halo, ${user.name}", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-            Text(text = user.email, fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 16.dp))
+
+            // =========================================================
+            // --- UBAHAN: FOTO DAN NAMA MENGGUNAKAN DATA REAL-TIME ---
+            // =========================================================
+            AsyncImage(
+                model = selectedImageUri ?: currentData.third ?: R.drawable.ic_avatar,
+                contentDescription = "Foto Profil",
+                modifier = Modifier.size(100.dp).clip(CircleShape).border(2.dp, Color.Gray, CircleShape),
+                contentScale = ContentScale.Crop
+            )
+            Text(text = "Halo, ${currentData.first}", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+            Text(text = currentData.second, fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 16.dp))
+
+            OutlinedButton(onClick = {
+                editProfileName = currentData.first
+                editProfileEmail = currentData.second
+                showEditProfile = true
+            }) {
+                Text("Edit Profil & Foto")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            // =========================================================
 
             Text(text = "Daftar Postingan dari Internet:", fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
             Spacer(modifier = Modifier.height(8.dp))
@@ -79,7 +128,6 @@ fun DashboardScreen(modifier: Modifier = Modifier, user: User, token: String, on
                                     verticalAlignment = Alignment.CenterVertically
                                 ){
                                     // --- BAGIAN KIRI: TEKS ---
-                                    // Modifier.weight(1f) di sini berfungsi untuk mendorong tombol hapus ke pojok kanan
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = post.title,
@@ -88,7 +136,7 @@ fun DashboardScreen(modifier: Modifier = Modifier, user: User, token: String, on
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(text = post.body, fontSize = 14.sp, color = Color.DarkGray)
-                                    } // <-- PERHATIKAN: Kurung tutup Column ada di sini
+                                    }
 
                                     //tombol edit
                                     IconButton(
@@ -102,7 +150,6 @@ fun DashboardScreen(modifier: Modifier = Modifier, user: User, token: String, on
                                     }
 
                                     // --- BAGIAN KANAN: TOMBOL HAPUS ---
-                                    // IconButton berada DI LUAR Column, tapi DI DALAM Row
                                     IconButton(
                                         onClick = {
                                             coroutineScope.launch {
@@ -218,7 +265,111 @@ fun DashboardScreen(modifier: Modifier = Modifier, user: User, token: String, on
             )
         }
 
+        // =========================================================
+        // --- TAMBAHAN: POP-UP EDIT PROFIL ---
+        // =========================================================
+        if (showEditProfile) {
+            AlertDialog(
+                onDismissRequest = { if (!isUpdatingProfile) showEditProfile = false },
+                title = { Text("Edit Profil") },
+                text = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        AsyncImage(
+                            model = selectedImageUri ?: currentData.third ?: R.drawable.ic_avatar,
+                            contentDescription = "Preview",
+                            modifier = Modifier.size(80.dp).clip(CircleShape).border(1.dp, Color.LightGray, CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        TextButton(onClick = { photoPickerLauncher.launch("image/*") }) {
+                            Text("Pilih Foto dari Galeri")
+                        }
+
+                        OutlinedTextField(
+                            value = editProfileName,
+                            onValueChange = { editProfileName = it },
+                            label = { Text("Nama Baru") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isUpdatingProfile
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = editProfileEmail,
+                            onValueChange = { editProfileEmail = it },
+                            label = { Text("Email Baru") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isUpdatingProfile
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            isUpdatingProfile = true
+                            coroutineScope.launch {
+                                var photoBytes: ByteArray? = null
+                                var photoName: String? = null
+
+                                // Kompresi gambar agar tidak ditolak Laravel
+                                if (selectedImageUri != null) {
+                                    val inputStream = context.contentResolver.openInputStream(selectedImageUri!!)
+                                    val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                                    inputStream?.close()
+                                    if(bitmap != null){
+                                        val outputStream = java.io.ByteArrayOutputStream()
+                                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 50, outputStream)
+                                        photoBytes = outputStream.toByteArray()
+                                        photoName = "profile_${System.currentTimeMillis()}.jpg"
+                                    }
+                                }
+
+                                val result = ApiService.updateProfil(token, editProfileName, editProfileEmail, photoBytes, photoName)
+
+                                isUpdatingProfile = false
+                                when (result) {
+                                    is ApiResponse.Success -> {
+                                        val dataBaru = result.data
+
+                                        // Simpan ke SharedPreferences
+                                        val sharedPref = context.getSharedPreferences("SesiPengguna", android.content.Context.MODE_PRIVATE)
+                                        sharedPref.edit().apply {
+                                            putString("NAMA_USER", dataBaru.name)
+                                            putString("EMAIL_USER", dataBaru.email)
+                                            if (dataBaru.photoUrl != null) {
+                                                putString("PHOTO_USER", dataBaru.photoUrl)
+                                            }
+                                            apply()
+                                        }
+
+                                        // Refresh layar seketika
+                                        currentData = getLatestUserData()
+                                        selectedImageUri = null
+                                        showEditProfile = false
+
+                                        Toast.makeText(context, "Profil Diperbarui Secara Real-Time!", Toast.LENGTH_LONG).show()
+                                    }
+                                    is ApiResponse.Error -> {
+                                        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                                    }
+                                    else -> {}
+                                }
+                            }
+                        },
+                        enabled = !isUpdatingProfile
+                    ) {
+                        if (isUpdatingProfile) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                        else Text("Simpan Profil")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showEditProfile = false }, enabled = !isUpdatingProfile) {
+                        Text("Batal")
+                    }
+                }
+            )
+        }
+        // =========================================================
 
     }
-
 }

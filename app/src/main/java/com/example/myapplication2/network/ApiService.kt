@@ -5,6 +5,7 @@ import com.example.myapplication2.model.User
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.DataOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -42,10 +43,18 @@ object ApiService {
                     val dataUser = jsonResponse.optJSONObject("user")
 
                     if (token.isNotEmpty() && dataUser != null) {
+
+                        //url photo dari photo_path laravel
+                        val photoPath = dataUser.optString("photo_path","")
+                        val baseUrlDomain= BASE_URL.replace("/api","")// Hilangkan /api dengan "" yang kosong
+                        val finalPhotoUrl= if(photoPath.isNotEmpty() && photoPath != "null") "$baseUrlDomain/storage/$photoPath" else null
+
+
                         val user = User(
                             id = dataUser.optInt("id", 0),
                             name = dataUser.optString("name", "Unknown"),
-                            email = dataUser.optString("email", "Unknown")
+                            email = dataUser.optString("email", "Unknown"),
+                            photoUrl = finalPhotoUrl
                         )
                         return@withContext ApiResponse.Success(Pair(user, token))
                     }
@@ -228,11 +237,82 @@ object ApiService {
 
             }else{
                 val erroText= connection.errorStream?.bufferedReader()?.use {it.readText()} ?: "Unknown error"
-                return@withContext ApiResponse.Error("Gagal Memperbarui: $responcode")
+                return@withContext ApiResponse.Error("Gagal Memperbarui: $responcode - $erroText")
             }
 
 
 
+        }catch (e: Exception){
+            return@withContext ApiResponse.Error("Koneksi gagal: ${e.message}")
+        }finally {
+            connection?.disconnect()
+        }
+    }
+
+    suspend fun updateProfil(token: String, name: String,email: String,photoBytes: ByteArray?,photoFileName: String?): ApiResponse<User> = withContext(Dispatchers.IO){
+        var connection: HttpURLConnection? = null
+        try {
+            val url = URL("${BASE_URL}/profile/update")
+            connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod="POST"
+            connection.setRequestProperty("Authorization","Bearer $token")
+            connection.setRequestProperty("Accept", "application/json")
+
+
+            // membuat id uni sebagai pembatasan antara data
+            val idUnik= "Boundary-"+ System.currentTimeMillis()
+            connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$idUnik")
+            connection.doOutput = true
+
+            val outputStream= DataOutputStream(connection.outputStream)
+
+            //fungsi bantuna menulis nama dan email
+            fun addTextPart(fieldName: String, value: String){
+                outputStream.writeBytes("--$idUnik\r\n")
+                outputStream.writeBytes("Content-Disposition: form-data; name=\"$fieldName\"\r\n\r\n")
+                outputStream.write(value.toByteArray(Charsets.UTF_8))
+                outputStream.writeBytes("\r\n")
+            }
+
+            addTextPart("name", name)
+            addTextPart("email", email)
+
+            // Logika untuk menyisipkan File Foto jika ada
+            if (photoBytes != null && photoFileName != null) {
+                outputStream.writeBytes("--$idUnik\r\n")
+                outputStream.writeBytes("Content-Disposition: form-data; name=\"photo\"; filename=\"$photoFileName\"\r\n")
+                outputStream.writeBytes("Content-Type: image/jpeg\r\n\r\n")
+                outputStream.write(photoBytes)
+                outputStream.writeBytes("\r\n")
+            }
+
+            // Penutup file multipart
+            outputStream.writeBytes("--$idUnik--\r\n")
+            outputStream.flush()
+            outputStream.close()
+
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                val jsonResponse = JSONObject(responseText)
+
+                // Ambil data User terbaru dari Laravel
+                val dataObj = jsonResponse.optJSONObject("data")
+                val userObj = dataObj?.optJSONObject("user")
+                val photoUrl = dataObj?.optString("photo_url", "")
+
+                val updatedUser = User(
+                    id = userObj?.optInt("id", 0) ?: 0,
+                    name = userObj?.optString("name", "") ?: name,
+                    email = userObj?.optString("email", "") ?: email,
+                    photoUrl = if (photoUrl.isNullOrEmpty() || photoUrl == "null") null else photoUrl
+                )
+                // Kembalikan data User baru!
+                return@withContext ApiResponse.Success(updatedUser)
+            } else {
+                val errorText = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                return@withContext ApiResponse.Error("Gagal update profil: $responseCode - $errorText")
+            }
         }catch (e: Exception){
             return@withContext ApiResponse.Error("Koneksi gagal: ${e.message}")
         }finally {
